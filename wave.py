@@ -16,7 +16,7 @@ API_KEY = os.getenv("WSAI_KEY")
 os.makedirs("result/videos", exist_ok=True)
 os.makedirs("result/images", exist_ok=True)
 
-def compress_image(image_path, max_size_kb=500, quality=85):
+def compress_image(image_path, max_size_kb=900, quality=85):
     """
     Compress image to target size while maintaining quality.
     Only compresses if image is larger than max_size_kb.
@@ -142,8 +142,8 @@ def qwen_edit(img1, age_gap):
         prompt = prompt_g
 
     # 3. Convert Local Assets to Base64 WITH COMPRESSION
-    img2_b64 = file_to_base64(img2_path, compress=True, max_size_kb=500)  # ✅ Compressing!
-    img3_b64 = file_to_base64(img3_path, compress=True, max_size_kb=500)  # ✅ Compressing!
+    img2_b64 = file_to_base64(img2_path, compress=True, max_size_kb=900)  # ✅ Compressing!
+    img3_b64 = file_to_base64(img3_path, compress=True, max_size_kb=900)  # ✅ Compressing!
 
     if not img2_b64 or not img3_b64:
         print("Failed to encode background or dress images. Check file paths in 'data' folder.")
