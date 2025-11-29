@@ -23,7 +23,7 @@ def compress_image(image_path, max_size_kb=900, quality=85):
 
     Args:
         image_path: Path to the image file
-        max_size_kb: Target maximum size in KB (default 500KB)
+        max_size_kb: Target maximum size in KB (default 900KB)
         quality: JPEG quality 1-100 (default 85)
 
     Returns:
@@ -89,7 +89,7 @@ def file_to_base64(file_path, compress=False, max_size_kb=900):
     Args:
         file_path: Path to the file
         compress: Whether to compress images (default False)
-        max_size_kb: Maximum size in KB for compression (default 500KB)
+        max_size_kb: Maximum size in KB for compression (default 900KB)
     """
     if not os.path.exists(file_path):
         print(f"Error: File not found at {file_path}")
@@ -117,9 +117,15 @@ def file_to_base64(file_path, compress=False, max_size_kb=900):
 
     return f"data:{mime_type};base64,{encoded_string}"
 
-def qwen_edit(img1, age_gap):
+
+# CHANGED: Renamed from qwen_edit to nano_banana_edit
+def nano_banana_edit(img1, age_gap):
+    """
+    Edit image using Google Nano Banana Pro API.
+    Places user in UAE-themed scene with traditional attire.
+    """
     # 1. Convert User Uploaded Image (img1) to Base64 WITH COMPRESSION
-    img1_b64 = file_to_base64(img1, compress=True, max_size_kb=900)  # ✅ Compressing!
+    img1_b64 = file_to_base64(img1, compress=True, max_size_kb=900)
     if not img1_b64:
         print("Failed to encode input image")
         return None
@@ -142,34 +148,30 @@ def qwen_edit(img1, age_gap):
         prompt = prompt_g
 
     # 3. Convert Local Assets to Base64 WITH COMPRESSION
-    img2_b64 = file_to_base64(img2_path, compress=True, max_size_kb=900)  # ✅ Compressing!
-    img3_b64 = file_to_base64(img3_path, compress=True, max_size_kb=900)  # ✅ Compressing!
+    img2_b64 = file_to_base64(img2_path, compress=True, max_size_kb=900)
+    img3_b64 = file_to_base64(img3_path, compress=True, max_size_kb=900)
 
     if not img2_b64 or not img3_b64:
         print("Failed to encode background or dress images. Check file paths in 'data' folder.")
         return None
 
-    # Request
-    url = "https://api.wavespeed.ai/api/v3/wavespeed-ai/qwen-image/edit-plus-lora"
+    # CHANGED: API endpoint from Qwen to Nano Banana Pro
+    url = "https://api.wavespeed.ai/api/v3/google/nano-banana-pro/edit"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {API_KEY}",
     }
+    # CHANGED: Payload structure for Nano Banana Pro
     payload = {
+        "aspect_ratio": "9:16",              # NEW: vertical format
         "enable_base64_output": False,
         "enable_sync_mode": False,
-        # Send Base64 strings instead of file paths
         "images": [img1_b64, img2_b64, img3_b64],
-        "loras": [
-            {
-                "path": "dx8152/Qwen-Edit-2509-Multiple-angles",
-                "scale": 1
-            }
-        ],
+        # REMOVED: "loras" field (Qwen-specific)
         "output_format": "jpeg",
         "prompt": prompt,
-        "seed": -1,
-        "size": "756*1024"
+        "resolution": "1k",                   # CHANGED: from "size": "756*1024"
+        # REMOVED: "seed" field
     }
 
     begin = time.time()
@@ -177,12 +179,12 @@ def qwen_edit(img1, age_gap):
     if response.status_code == 200:
         result = response.json()["data"]
         request_id = result["id"]
-        print(f"Task submitted successfully. Request ID: {request_id}")
+        print(f"✅ Nano Banana task submitted. Request ID: {request_id}")
     else:
-        print(f"Error: {response.status_code}, {response.text}")
+        print(f"❌ Error: {response.status_code}, {response.text}")
         return None
 
-    # ... (Polling logic remains exactly the same as your original code) ...
+    # Poll for results
     url = f"https://api.wavespeed.ai/api/v3/predictions/{request_id}/result"
     headers = {"Authorization": f"Bearer {API_KEY}"}
 
@@ -195,23 +197,28 @@ def qwen_edit(img1, age_gap):
             status = result["status"]
             if status == "completed":
                 end = time.time()
-                print(f"Task completed in {end - begin} seconds.")
-                return result["outputs"][0] # Returns a URL
+                print(f"✅ Image edit completed in {end - begin:.1f} seconds.")
+                return result["outputs"][0]  # Returns a URL
             elif status == "failed":
-                print(f"Task failed: {result.get('error')}")
+                print(f"❌ Task failed: {result.get('error')}")
                 return None
             else:
-                print(f"Task still processing. Status: {status}")
+                print(f"⏳ Task processing... Status: {status}")
         else:
-            print(f"Error: {response.status_code}, {response.text}")
+            print(f"❌ Error: {response.status_code}, {response.text}")
             return None
         time.sleep(0.1)
         retry_count += 1
+    
+    print("❌ Task timed out after maximum retries")
     return None
 
 
 def wans2v(img, age_gap):
-    # Note: 'img' here is already a URL (output from qwen_edit), so we don't convert it.
+    """
+    Generate video from edited image using WAN 2.2 speech-to-video.
+    """
+    # Note: 'img' here is already a URL (output from nano_banana_edit)
 
     # Select audio and prompt
     if age_gap == "Male":
@@ -239,8 +246,8 @@ def wans2v(img, age_gap):
         "Authorization": f"Bearer {API_KEY}",
     }
     payload = {
-        "audio": audio_b64, # Sending Base64 audio
-        "image": img,       # Sending URL image (from previous step)
+        "audio": audio_b64,  # Base64 encoded audio
+        "image": img,        # URL from previous step
         "prompt": prompt,
         "resolution": "480p",
         "seed": -1
@@ -251,12 +258,12 @@ def wans2v(img, age_gap):
     if response.status_code == 200:
         result = response.json()["data"]
         request_id = result["id"]
-        print(f"Task submitted successfully. Request ID: {request_id}")
+        print(f"✅ Video task submitted. Request ID: {request_id}")
     else:
-        print(f"Error: {response.status_code}, {response.text}")
+        print(f"❌ Error: {response.status_code}, {response.text}")
         return None
 
-    # ... (Polling logic remains the same) ...
+    # Poll for results
     url = f"https://api.wavespeed.ai/api/v3/predictions/{request_id}/result"
     headers = {"Authorization": f"Bearer {API_KEY}"}
 
@@ -269,21 +276,24 @@ def wans2v(img, age_gap):
             status = result["status"]
             if status == "completed":
                 end = time.time()
-                print(f"Task completed in {end - begin} seconds.")
+                print(f"✅ Video generation completed in {end - begin:.1f} seconds.")
                 return result["outputs"][0]
             elif status == "failed":
-                print(f"Task failed: {result.get('error')}")
+                print(f"❌ Task failed: {result.get('error')}")
                 return None
             else:
-                print(f"Task still processing. Status: {status}")
+                print(f"⏳ Video processing... Status: {status}")
         else:
             return None
         time.sleep(0.5)
         retry_count += 1
+    
+    print("❌ Video generation timed out")
     return None
 
+
 def save_video(url, id):
-    # (This function remains exactly the same as your original)
+    """Download and save video from URL."""
     if url is None:
         print("Error: No URL provided")
         return None
@@ -292,14 +302,15 @@ def save_video(url, id):
         file_path = f"result/videos/{id}.mp4"
         with open(file_path, "wb") as f:
             f.write(response.content)
-        print(f"Video saved successfully to {file_path}")
+        print(f"✅ Video saved: {file_path}")
         return file_path
     else:
-        print(f"Error downloading video: {response.status_code}")
+        print(f"❌ Error downloading video: {response.status_code}")
         return None
 
+
 def save_photo(url, id):
-    # (This function remains exactly the same as your original)
+    """Download and save edited image from URL."""
     if url is None:
         print("Error: No URL provided")
         return None
@@ -308,16 +319,15 @@ def save_photo(url, id):
         file_path = f"result/images/{id}.jpeg"
         with open(file_path, "wb") as f:
             f.write(response.content)
-        print(f"Image saved successfully to {file_path}")
+        print(f"✅ Image saved: {file_path}")
         return file_path
     else:
-        print(f"Error downloading video: {response.status_code}")
+        print(f"❌ Error downloading image: {response.status_code}")
         return None
 
+
 def generate_qr_code(video_path):
-    """Generate QR code for video download"""
-    # Create absolute URL for the video
-    # Gradio serves files from the temporary directory
+    """Generate QR code for video download."""
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -332,7 +342,7 @@ def generate_qr_code(video_path):
     # Create QR code image
     qr_img = qr.make_image(fill_color="black", back_color="white")
 
-    # Convert to PIL Image and save to BytesIO
+    # Convert to PIL Image and return
     buffer = BytesIO()
     qr_img.save(buffer, format='PNG')
     buffer.seek(0)
